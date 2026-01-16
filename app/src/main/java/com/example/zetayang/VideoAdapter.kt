@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.Button
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -21,6 +22,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.recyclerview.widget.RecyclerView
+import androidx.appcompat.app.AppCompatActivity
 import coil.load
 import retrofit2.Call
 import retrofit2.Callback
@@ -75,6 +77,26 @@ class VideoAdapter(private val dramas: List<DramaBook>) : RecyclerView.Adapter<V
                 val bottomNavHeight = (80 * view.context.resources.displayMetrics.density).toInt()
                 view.updatePadding(bottom = bars.bottom + bottomNavHeight) 
                 insets
+            }
+
+            // --- LOGIC TOMBOL EPISODE ---
+            val btnEpisodes: Button = itemView.findViewById(R.id.btnEpisodes)
+            
+            btnEpisodes.setOnClickListener {
+                if (currentBookId != null) {
+                    // Tampilkan Bottom Sheet
+                    val activity = itemView.context as? AppCompatActivity
+                    
+                    val sheet = EpisodeSheet(currentBookId!!) { newVideoUrl ->
+                        // Callback: Video baru dipilih dari Sheet
+                        println("Ganti Video ke: $newVideoUrl")
+                        startExoPlayer(itemView.context, newVideoUrl)
+                    }
+                    
+                    activity?.supportFragmentManager?.let { fragmentManager ->
+                        sheet.show(fragmentManager, "EpisodeSheet")
+                    }
+                }
             }
         }
 
