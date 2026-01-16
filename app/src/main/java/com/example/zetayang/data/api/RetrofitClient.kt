@@ -1,8 +1,8 @@
-package com.example.zetayang
+package com.example.zetayang.data.api
 
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.concurrent.TimeUnit // PENTING: Jangan lupa import ini
+import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager

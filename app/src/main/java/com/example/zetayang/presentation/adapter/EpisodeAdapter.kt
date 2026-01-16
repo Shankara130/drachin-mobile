@@ -1,10 +1,14 @@
-package com.example.zetayang
+package com.example.zetayang.presentation.adapter
 
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+
+import com.example.zetayang.R
+import com.example.zetayang.data.model.Episode
+
 
 class EpisodeAdapter(
     private val episodes: List<Episode>,

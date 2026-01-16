@@ -1,4 +1,4 @@
-package com.example.zetayang
+package com.example.zetayang.data.model
 
 import com.google.gson.annotations.SerializedName
 
