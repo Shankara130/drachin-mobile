@@ -58,7 +58,8 @@ class EpisodeSheet(
                 progressBar.visibility = View.GONE
                 
                 if (episodes.isNotEmpty()) {
-                    recyclerView.adapter = EpisodeAdapter(episodes) { url ->
+                    // Fix: Adapter sekarang menerima (String, Int) tapi kita hanya butuh String
+                    recyclerView.adapter = EpisodeAdapter(episodes) { url, _ ->
                         onVideoSelected(url)
                         dismiss()
                     }

@@ -1,6 +1,7 @@
 package com.example.zetayang
 
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -23,9 +24,14 @@ class MainActivity : AppCompatActivity() {
     
     private val viewModel: MainViewModel by viewModels() 
     private var adapter: VideoAdapter? = null
+    private var currentPosition = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Hide system navigation bar
+        hideSystemUI()
+        
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
 
@@ -40,7 +46,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         viewModel.homeFeed.observe(this) { dramaList ->
-            // FIX: Gunakan cara aman untuk cek list kosong
             if (!dramaList.isNullOrEmpty()) {
                 adapter = VideoAdapter(dramaList, viewModel.getVideoUrlUseCase)
                 viewPager.adapter = adapter
@@ -57,6 +62,7 @@ class MainActivity : AppCompatActivity() {
         viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
+                currentPosition = position
                 playVideoAt(position)
             }
         })
@@ -71,5 +77,44 @@ class MainActivity : AppCompatActivity() {
         } else {
             viewPager.postDelayed({ playVideoAt(position) }, 100)
         }
+    }
+    
+    private fun pauseCurrentVideo() {
+        val recyclerView = viewPager.getChildAt(0) as? RecyclerView ?: return
+        val viewHolder = recyclerView.findViewHolderForAdapterPosition(currentPosition)
+        
+        if (viewHolder is VideoAdapter.VideoViewHolder) {
+            viewHolder.pauseVideo()
+        }
+    }
+    
+    private fun hideSystemUI() {
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+            or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+            or View.SYSTEM_UI_FLAG_FULLSCREEN
+        )
+    }
+    
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            hideSystemUI()
+        }
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Pause video when activity is paused (e.g., when navigating to another activity)
+        pauseCurrentVideo()
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Resume video when coming back
+        playVideoAt(currentPosition)
     }
 }

@@ -195,13 +195,17 @@ class VideoAdapter(
             
             btnEpisodes.setOnClickListener {
                 if (currentBookId != null) {
-                    val activity = itemView.context as? AppCompatActivity
-                    val sheet = EpisodeSheet(currentBookId!!) { newUrl ->
-                        startExoPlayer(itemView.context, newUrl)
+                    // Navigate to EpisodeDetailActivity
+                    val intent = android.content.Intent(
+                        itemView.context,
+                        com.example.zetayang.presentation.activity.EpisodeDetailActivity::class.java
+                    ).apply {
+                        putExtra(com.example.zetayang.presentation.activity.EpisodeDetailActivity.EXTRA_BOOK_ID, currentBookId)
+                        putExtra(com.example.zetayang.presentation.activity.EpisodeDetailActivity.EXTRA_DRAMA_TITLE, drama.bookName)
+                        putExtra(com.example.zetayang.presentation.activity.EpisodeDetailActivity.EXTRA_COVER_URL, drama.coverUrl)
+                        putExtra(com.example.zetayang.presentation.activity.EpisodeDetailActivity.EXTRA_VIDEO_URL, urlCacheRef?.get(currentBookId))
                     }
-                    activity?.let {
-                        sheet.show(it.supportFragmentManager, "EpSheet")
-                    }
+                    itemView.context.startActivity(intent)
                 }
             }
         }
@@ -355,6 +359,10 @@ class VideoAdapter(
             imgThumb.visibility = View.VISIBLE
             imgThumb.alpha = 1f
             progressBar?.visibility = View.GONE
+        }
+        
+        fun pauseVideo() {
+            exoPlayer?.pause()
         }
     }
 }

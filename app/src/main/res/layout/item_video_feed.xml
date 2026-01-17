@@ -37,7 +37,7 @@
         android:orientation="vertical"
         android:gravity="center_horizontal"
         android:paddingBottom="16dp"
-        android:layout_marginBottom="110dp" android:layout_marginEnd="16dp"
+        android:layout_marginBottom="60dp" android:layout_marginEnd="16dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
@@ -62,7 +62,7 @@
         android:paddingStart="16dp"
         android:paddingEnd="80dp"
         android:paddingBottom="10dp"
-        android:layout_marginBottom="110dp"
+        android:layout_marginBottom="60dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
