@@ -6,6 +6,8 @@ import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
+import okhttp3.Cache
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -25,7 +27,7 @@ object RetrofitClient {
 
     fun getUnsafeOkHttpClient(): OkHttpClient {
         try {
-            // Setup bypass SSL (Kode lama Anda)
+            // Setup bypass SSL
             val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
                 override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
                 override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
@@ -40,16 +42,75 @@ object RetrofitClient {
             builder.sslSocketFactory(sslSocketFactory, trustAllCerts[0] as X509TrustManager)
             builder.hostnameVerifier { _, _ -> true }
 
-            // --- PERBAIKAN DI SINI: PERPANJANG TIMEOUT ---
-            builder.connectTimeout(60, TimeUnit.SECONDS) // Waktu tunggu nyambung ke server
-            builder.readTimeout(60, TimeUnit.SECONDS)    // Waktu tunggu baca data
-            builder.writeTimeout(60, TimeUnit.SECONDS)   // Waktu tunggu kirim data
-            // ---------------------------------------------
+            // ===== OPTIMASI TIMEOUT =====
+            // Timeout untuk koneksi awal
+            builder.connectTimeout(30, TimeUnit.SECONDS)
+            // Timeout untuk membaca data (penting untuk video)
+            builder.readTimeout(90, TimeUnit.SECONDS)
+            // Timeout untuk menulis data
+            builder.writeTimeout(30, TimeUnit.SECONDS)
+            // Timeout untuk keseluruhan call
+            builder.callTimeout(120, TimeUnit.SECONDS)
 
-            // Logging (Opsional, biar kelihatan di Logcat)
+            // ===== CONNECTION POOLING =====
+            // Reuse koneksi untuk performa lebih baik
+            builder.connectionPool(
+                ConnectionPool(
+                    maxIdleConnections = 5,      // Jumlah koneksi idle yang disimpan
+                    keepAliveDuration = 5,       // Berapa lama koneksi disimpan
+                    timeUnit = TimeUnit.MINUTES
+                )
+            )
+
+            // ===== RETRY ON CONNECTION FAILURE =====
+            builder.retryOnConnectionFailure(true)
+
+            // ===== CACHE (Optional - untuk API response) =====
+            // Uncomment jika ingin cache API response (bukan untuk video streaming)
+            // val cacheSize = (10 * 1024 * 1024).toLong() // 10 MB
+            // val cache = Cache(context.cacheDir, cacheSize)
+            // builder.cache(cache)
+
+            // ===== LOGGING =====
             val logging = HttpLoggingInterceptor()
-            logging.level = HttpLoggingInterceptor.Level.BODY
+            // Deteksi debug mode tanpa BuildConfig
+            val isDebuggable = try {
+                android.os.Build.TYPE.contains("eng") || 
+                android.os.Build.TYPE.contains("userdebug")
+            } catch (e: Exception) {
+                false
+            }
+            logging.level = if (isDebuggable) {
+                HttpLoggingInterceptor.Level.BODY
+            } else {
+                HttpLoggingInterceptor.Level.BASIC
+            }
             builder.addInterceptor(logging)
+
+            // ===== CUSTOM INTERCEPTOR untuk monitoring =====
+            builder.addInterceptor { chain ->
+                val request = chain.request()
+                val startTime = System.currentTimeMillis()
+                
+                try {
+                    val response = chain.proceed(request)
+                    val endTime = System.currentTimeMillis()
+                    
+                    android.util.Log.d(
+                        "NetworkSpeed",
+                        "URL: ${request.url} | Time: ${endTime - startTime}ms | Status: ${response.code}"
+                    )
+                    
+                    response
+                } catch (e: Exception) {
+                    val endTime = System.currentTimeMillis()
+                    android.util.Log.e(
+                        "NetworkError",
+                        "URL: ${request.url} | Time: ${endTime - startTime}ms | Error: ${e.message}"
+                    )
+                    throw e
+                }
+            }
 
             return builder.build()
         } catch (e: Exception) {
