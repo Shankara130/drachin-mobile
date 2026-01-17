@@ -6,41 +6,16 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <!-- Video Player -->
-    <androidx.media3.ui.PlayerView
-        android:id="@+id/playerView"
+    <!-- ViewPager2 untuk swipe antar episode -->
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/episodeViewPager"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        app:use_controller="true"
-        app:resize_mode="fit"
+        android:orientation="vertical"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toTopOf="@id/bottomSheet" />
 
-    <!-- Thumbnail (hidden when video plays) -->
-    <ImageView
-        android:id="@+id/imgThumb"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:scaleType="centerCrop"
-        android:visibility="visible"
-        app:layout_constraintTop_toTopOf="@id/playerView"
-        app:layout_constraintBottom_toBottomOf="@id/playerView"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- Progress Bar -->
-    <ProgressBar
-        android:id="@+id/progressBar"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:visibility="gone"
-        android:indeterminateTint="@android:color/white"
-        app:layout_constraintTop_toTopOf="@id/playerView"
-        app:layout_constraintBottom_toBottomOf="@id/playerView"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- Back Button -->
+    <!-- Back Button (Floating) -->
     <ImageView
         android:id="@+id/btnBack"
         android:layout_width="40dp"
@@ -53,7 +28,7 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- Episode Title -->
+    <!-- Episode Title (Floating) -->
     <TextView
         android:id="@+id/tvEpisodeTitle"
         android:layout_width="wrap_content"
