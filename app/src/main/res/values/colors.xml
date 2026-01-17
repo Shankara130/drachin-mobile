@@ -2,4 +2,12 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Chip Background Color -->
+    <color name="chip_background_checked">#FFD700</color>
+    <color name="chip_background_unchecked">#2A2A2A</color>
+    
+    <!-- Chip Text Color -->
+    <color name="chip_text_checked">#000000</color>
+    <color name="chip_text_unchecked">#CCCCCC</color>
 </resources>

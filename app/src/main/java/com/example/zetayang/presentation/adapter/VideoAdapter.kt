@@ -363,6 +363,7 @@ class VideoAdapter(
         
         fun pauseVideo() {
             exoPlayer?.pause()
+            Log.d("VideoAdapter", "⏸️ Video paused at position $absoluteAdapterPosition")
         }
     }
 }

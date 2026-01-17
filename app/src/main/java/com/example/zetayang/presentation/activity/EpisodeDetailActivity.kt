@@ -90,6 +90,7 @@ class EpisodeDetailActivity : AppCompatActivity() {
         
         // Back button
         btnBack.setOnClickListener {
+            Log.d("EpisodeDetail", "🔙 Back button pressed")
             finish()
         }
         
@@ -177,6 +178,12 @@ class EpisodeDetailActivity : AppCompatActivity() {
         }
     }
     
+    override fun onBackPressed() {
+        Log.d("EpisodeDetail", "🔙 System back pressed")
+        pauseAllVideos()
+        super.onBackPressed()
+    }
+    
     override fun onResume() {
         super.onResume()
         hideSystemUI()
@@ -191,11 +198,46 @@ class EpisodeDetailActivity : AppCompatActivity() {
     
     override fun onPause() {
         super.onPause()
-        // Video akan auto-pause oleh adapter saat view detached
+        // Pause all videos when activity is paused
+        pauseAllVideos()
+        Log.d("EpisodeDetail", "⏸️ Activity paused - videos stopped")
+    }
+    
+    override fun onStop() {
+        super.onStop()
+        // Stop all videos when activity is stopped
+        pauseAllVideos()
+        Log.d("EpisodeDetail", "🛑 Activity stopped - videos stopped")
     }
     
     override fun onDestroy() {
         super.onDestroy()
-        // Cleanup akan di-handle oleh adapter
+        // Release all video resources
+        releaseAllVideos()
+        Log.d("EpisodeDetail", "💥 Activity destroyed - all videos released")
+    }
+    
+    private fun pauseAllVideos() {
+        // Pause all videos in ViewPager2
+        val recyclerView = episodeViewPager.getChildAt(0) as? RecyclerView ?: return
+        
+        for (i in 0 until recyclerView.childCount) {
+            val holder = recyclerView.getChildViewHolder(recyclerView.getChildAt(i))
+            if (holder is EpisodeVideoAdapter.EpisodeVideoViewHolder) {
+                holder.pauseVideo()
+            }
+        }
+    }
+    
+    private fun releaseAllVideos() {
+        // Release all video resources to free memory
+        val recyclerView = episodeViewPager.getChildAt(0) as? RecyclerView ?: return
+        
+        for (i in 0 until recyclerView.childCount) {
+            val holder = recyclerView.getChildViewHolder(recyclerView.getChildAt(i))
+            if (holder is EpisodeVideoAdapter.EpisodeVideoViewHolder) {
+                holder.releaseVideo()
+            }
+        }
     }
 }

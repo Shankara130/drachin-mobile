@@ -50,7 +50,14 @@ class EpisodeVideoAdapter(
 
     override fun onViewDetachedFromWindow(holder: EpisodeVideoViewHolder) {
         super.onViewDetachedFromWindow(holder)
+        Log.d("EpisodeVideo", "👋 ViewHolder detached at position ${holder.absoluteAdapterPosition}")
         holder.pauseVideo()
+    }
+    
+    override fun onViewRecycled(holder: EpisodeVideoViewHolder) {
+        super.onViewRecycled(holder)
+        Log.d("EpisodeVideo", "♻️ ViewHolder recycled at position ${holder.absoluteAdapterPosition}")
+        holder.releaseVideo()
     }
 
     class EpisodeVideoViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -146,6 +153,7 @@ class EpisodeVideoAdapter(
 
         fun pauseVideo() {
             exoPlayer?.pause()
+            Log.d("EpisodeVideo", "⏸️ Video paused")
         }
 
         fun releaseVideo() {
@@ -154,6 +162,7 @@ class EpisodeVideoAdapter(
             imgThumb.visibility = View.VISIBLE
             imgThumb.alpha = 1f
             progressBar.visibility = View.GONE
+            Log.d("EpisodeVideo", "💥 Video released")
         }
     }
 }

@@ -1,7 +1,9 @@
 package com.example.zetayang
 
 import android.os.Bundle
+import android.util.Log
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -10,17 +12,20 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.doOnLayout
 import androidx.core.view.updatePadding
+import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.bottomnavigation.BottomNavigationView
 
 import com.example.zetayang.presentation.adapter.VideoAdapter
+import com.example.zetayang.presentation.fragment.DiscoverFragment
 import com.example.zetayang.presentation.viewmodel.MainViewModel
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var viewPager: ViewPager2
     private lateinit var bottomNav: BottomNavigationView
+    private lateinit var fragmentContainer: FrameLayout
     
     private val viewModel: MainViewModel by viewModels() 
     private var adapter: VideoAdapter? = null
@@ -37,6 +42,7 @@ class MainActivity : AppCompatActivity() {
 
         viewPager = findViewById(R.id.viewPager)
         bottomNav = findViewById(R.id.bottomNav)
+        fragmentContainer = findViewById(R.id.fragmentContainer)
         viewPager.orientation = ViewPager2.ORIENTATION_VERTICAL
 
         ViewCompat.setOnApplyWindowInsetsListener(bottomNav) { view, insets ->
@@ -66,6 +72,55 @@ class MainActivity : AppCompatActivity() {
                 playVideoAt(position)
             }
         })
+        
+        // Bottom Navigation Click Listener
+        bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_home -> {
+                    showHomeFeed()
+                    true
+                }
+                R.id.nav_discover -> {
+                    showDiscoverFragment()
+                    true
+                }
+                R.id.nav_profile -> {
+                    // Pause video when switching to profile
+                    pauseCurrentVideo()
+                    
+                    // TODO: Show profile fragment
+                    Toast.makeText(this, "Profile (Coming Soon)", Toast.LENGTH_SHORT).show()
+                    false
+                }
+                else -> false
+            }
+        }
+    }
+    
+    private fun showHomeFeed() {
+        viewPager.visibility = View.VISIBLE
+        fragmentContainer.visibility = View.GONE
+        
+        // Clear all fragments
+        supportFragmentManager.fragments.forEach {
+            supportFragmentManager.beginTransaction().remove(it).commit()
+        }
+        
+        // Resume video when switching back to home
+        playVideoAt(currentPosition)
+    }
+    
+    private fun showDiscoverFragment() {
+        // IMPORTANT: Pause ALL videos before hiding viewPager
+        pauseAllVideos()
+        
+        viewPager.visibility = View.GONE
+        fragmentContainer.visibility = View.VISIBLE
+        
+        val fragment = DiscoverFragment()
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragmentContainer, fragment)
+            .commit()
     }
 
     private fun playVideoAt(position: Int) {
@@ -85,7 +140,23 @@ class MainActivity : AppCompatActivity() {
         
         if (viewHolder is VideoAdapter.VideoViewHolder) {
             viewHolder.pauseVideo()
+            Log.d("MainActivity", "⏸️ Paused video at position $currentPosition")
+        } else {
+            Log.w("MainActivity", "⚠️ Could not find ViewHolder to pause")
         }
+    }
+    
+    private fun pauseAllVideos() {
+        // Extra safety: pause ALL videos in RecyclerView
+        val recyclerView = viewPager.getChildAt(0) as? RecyclerView ?: return
+        
+        for (i in 0 until recyclerView.childCount) {
+            val holder = recyclerView.getChildViewHolder(recyclerView.getChildAt(i))
+            if (holder is VideoAdapter.VideoViewHolder) {
+                holder.pauseVideo()
+            }
+        }
+        Log.d("MainActivity", "⏸️⏸️ Paused ALL videos")
     }
     
     private fun hideSystemUI() {
@@ -108,13 +179,29 @@ class MainActivity : AppCompatActivity() {
     
     override fun onPause() {
         super.onPause()
-        // Pause video when activity is paused (e.g., when navigating to another activity)
+        // ALWAYS pause video when activity is paused (background, screen off, etc)
         pauseCurrentVideo()
+        Log.d("MainActivity", "⏸️ Activity paused - video stopped")
     }
     
     override fun onResume() {
         super.onResume()
-        // Resume video when coming back
-        playVideoAt(currentPosition)
+        Log.d("MainActivity", "📱 onResume called - viewPager visible: ${viewPager.visibility == View.VISIBLE}")
+        
+        // Only resume video if we're on home tab
+        if (viewPager.visibility == View.VISIBLE) {
+            // Small delay to ensure view is ready
+            viewPager.postDelayed({
+                playVideoAt(currentPosition)
+                Log.d("MainActivity", "▶️ Activity resumed - video playing at position $currentPosition")
+            }, 100)
+        }
+    }
+    
+    override fun onStop() {
+        super.onStop()
+        // Extra safety: pause ALL videos when activity is stopped
+        pauseAllVideos()
+        Log.d("MainActivity", "🛑 Activity stopped - all videos stopped")
     }
 }
