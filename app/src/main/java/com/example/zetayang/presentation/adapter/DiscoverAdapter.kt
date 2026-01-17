@@ -38,33 +38,43 @@ class DiscoverAdapter(
         private val badgeNew: TextView? = itemView.findViewById(R.id.badgeNew)
 
         fun bind(drama: DramaBook) {
-            // Load cover image
-            imgCover.load(drama.coverUrl) {
-                crossfade(true)
-                placeholder(R.drawable.placeholder_drama)
+            // Load cover image with fallback
+            val coverUrl = drama.coverUrl
+            if (!coverUrl.isNullOrEmpty()) {
+                imgCover.load(coverUrl) {
+                    crossfade(true)
+                    placeholder(R.drawable.placeholder_drama)
+                    error(R.drawable.placeholder_drama)
+                }
+            } else {
+                imgCover.setImageResource(R.drawable.placeholder_drama)
             }
 
-            // Set title
-            tvTitle.text = drama.bookName
+            // Set title with fallback
+            tvTitle.text = drama.bookName ?: "Drama #${drama.bookId}"
 
-            // Set subtitle (genre/category)
-            val genres = drama.tags?.take(2)?.joinToString(" | ") ?: "Serangan balik"
-            tvSubtitle.text = "$genres | ${drama.chapterCount} epis..."
+            // Set subtitle (genre/category) with null safety
+            val genres = drama.tags?.take(2)?.joinToString(" | ") ?: "Drama"
+            val chapterCount = drama.chapterCount ?: 0
+            tvSubtitle.text = "$genres | $chapterCount epis..."
 
-            // Set views
-            tvViews.text = formatViews(drama.playCount)
+            // Set views with null safety
+            tvViews.text = formatViews(drama.playCount ?: "0")
 
             // Show "Baru" badge for dramas with high rank
             badgeNew?.visibility = if (drama.rank?.rankType == 1) View.VISIBLE else View.GONE
 
             // Click listener
             cardView.setOnClickListener {
-                val intent = Intent(itemView.context, EpisodeDetailActivity::class.java).apply {
-                    putExtra(EpisodeDetailActivity.EXTRA_BOOK_ID, drama.bookId)
-                    putExtra(EpisodeDetailActivity.EXTRA_DRAMA_TITLE, drama.bookName)
-                    putExtra(EpisodeDetailActivity.EXTRA_COVER_URL, drama.coverUrl)
+                // Only navigate if bookName is not null
+                if (drama.bookName != null) {
+                    val intent = Intent(itemView.context, EpisodeDetailActivity::class.java).apply {
+                        putExtra(EpisodeDetailActivity.EXTRA_BOOK_ID, drama.bookId)
+                        putExtra(EpisodeDetailActivity.EXTRA_DRAMA_TITLE, drama.bookName)
+                        putExtra(EpisodeDetailActivity.EXTRA_COVER_URL, drama.coverUrl)
+                    }
+                    itemView.context.startActivity(intent)
                 }
-                itemView.context.startActivity(intent)
             }
         }
 
@@ -72,12 +82,12 @@ class DiscoverAdapter(
             return try {
                 val count = views.toLongOrNull() ?: 0
                 when {
-                    count >= 1_000_000 -> "👍 ${count / 1_000_000}.${(count % 1_000_000) / 100_000}M"
-                    count >= 1_000 -> "👍 ${count / 1_000}.${(count % 1_000) / 100}K"
-                    else -> "👍 $count"
+                    count >= 1_000_000 -> "👁 ${count / 1_000_000}.${(count % 1_000_000) / 100_000}M"
+                    count >= 1_000 -> "👁 ${count / 1_000}.${(count % 1_000) / 100}K"
+                    else -> "👁 $count"
                 }
             } catch (e: Exception) {
-                "👍 $views"
+                "👁 $views"
             }
         }
     }

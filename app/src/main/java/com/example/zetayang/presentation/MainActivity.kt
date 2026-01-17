@@ -12,7 +12,6 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.doOnLayout
 import androidx.core.view.updatePadding
-import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.bottomnavigation.BottomNavigationView
@@ -30,6 +29,9 @@ class MainActivity : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels() 
     private var adapter: VideoAdapter? = null
     private var currentPosition = 0
+    
+    // Flag untuk mencegah multiple observer calls
+    private var isFirstLoad = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,25 +53,74 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
+        // Observe home feed data
         viewModel.homeFeed.observe(this) { dramaList ->
-            if (!dramaList.isNullOrEmpty()) {
+            if (dramaList.isNullOrEmpty()) {
+                Log.w("MainActivity", "⚠️ Empty drama list received")
+                return@observe
+            }
+            
+            Log.d("MainActivity", "📱 Received ${dramaList.size} dramas | isFirstLoad: $isFirstLoad | currentPos: $currentPosition")
+            
+            if (isFirstLoad) {
+                // FIRST LOAD - Create adapter
                 adapter = VideoAdapter(dramaList, viewModel.getVideoUrlUseCase)
                 viewPager.adapter = adapter
                 viewPager.doOnLayout { playVideoAt(0) }
+                isFirstLoad = false
+                Log.d("MainActivity", "✅ First load complete - adapter created")
+            } else {
+                // LOAD MORE - Update adapter WITHOUT recreating
+                // IMPORTANT: Save position BEFORE updating
+                val savedPosition = currentPosition
+                
+                // Update adapter data
+                adapter?.updateDramas(dramaList)
+                
+                // Restore position
+                viewPager.post {
+                    if (savedPosition < dramaList.size) {
+                        viewPager.setCurrentItem(savedPosition, false)
+                        Log.d("MainActivity", "✅ Position restored to $savedPosition")
+                    }
+                }
             }
         }
 
+        // Observe errors
         viewModel.error.observe(this) { errorMsg ->
             Toast.makeText(this, "Error: $errorMsg", Toast.LENGTH_LONG).show()
+            Log.e("MainActivity", "❌ Error: $errorMsg")
         }
 
+        // Observe loading state
+        viewModel.isLoading.observe(this) { isLoading ->
+            if (isLoading) {
+                Log.d("MainActivity", "⏳ Loading...")
+            } else {
+                Log.d("MainActivity", "✅ Loading complete")
+            }
+        }
+
+        // Load initial data
         viewModel.loadHomeFeed()
 
+        // ViewPager scroll listener for infinite scroll
         viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
                 currentPosition = position
                 playVideoAt(position)
+                
+                // Load more when near end (80% threshold)
+                val totalItems = adapter?.itemCount ?: 0
+                val threshold = (totalItems * 0.8).toInt()
+                
+                Log.d("MainActivity", "📍 Position: $position/$totalItems (threshold: $threshold)")
+                
+                if (position >= threshold && !viewModel.isCurrentlyLoading()) {
+                    loadMoreVideos()
+                }
             }
         })
         
@@ -85,10 +136,7 @@ class MainActivity : AppCompatActivity() {
                     true
                 }
                 R.id.nav_profile -> {
-                    // Pause video when switching to profile
                     pauseCurrentVideo()
-                    
-                    // TODO: Show profile fragment
                     Toast.makeText(this, "Profile (Coming Soon)", Toast.LENGTH_SHORT).show()
                     false
                 }
@@ -141,13 +189,10 @@ class MainActivity : AppCompatActivity() {
         if (viewHolder is VideoAdapter.VideoViewHolder) {
             viewHolder.pauseVideo()
             Log.d("MainActivity", "⏸️ Paused video at position $currentPosition")
-        } else {
-            Log.w("MainActivity", "⚠️ Could not find ViewHolder to pause")
         }
     }
     
     private fun pauseAllVideos() {
-        // Extra safety: pause ALL videos in RecyclerView
         val recyclerView = viewPager.getChildAt(0) as? RecyclerView ?: return
         
         for (i in 0 until recyclerView.childCount) {
@@ -157,6 +202,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
         Log.d("MainActivity", "⏸️⏸️ Paused ALL videos")
+    }
+    
+    private fun loadMoreVideos() {
+        Log.d("MainActivity", "🔄 Load more triggered at position $currentPosition")
+        Toast.makeText(this, "Mengacak video...", Toast.LENGTH_SHORT).show()
+        
+        // Shuffle existing data (NO API call)
+        viewModel.loadMoreHomeFeed()
     }
     
     private fun hideSystemUI() {
@@ -179,18 +232,13 @@ class MainActivity : AppCompatActivity() {
     
     override fun onPause() {
         super.onPause()
-        // ALWAYS pause video when activity is paused (background, screen off, etc)
         pauseCurrentVideo()
         Log.d("MainActivity", "⏸️ Activity paused - video stopped")
     }
     
     override fun onResume() {
         super.onResume()
-        Log.d("MainActivity", "📱 onResume called - viewPager visible: ${viewPager.visibility == View.VISIBLE}")
-        
-        // Only resume video if we're on home tab
         if (viewPager.visibility == View.VISIBLE) {
-            // Small delay to ensure view is ready
             viewPager.postDelayed({
                 playVideoAt(currentPosition)
                 Log.d("MainActivity", "▶️ Activity resumed - video playing at position $currentPosition")
@@ -200,7 +248,6 @@ class MainActivity : AppCompatActivity() {
     
     override fun onStop() {
         super.onStop()
-        // Extra safety: pause ALL videos when activity is stopped
         pauseAllVideos()
         Log.d("MainActivity", "🛑 Activity stopped - all videos stopped")
     }

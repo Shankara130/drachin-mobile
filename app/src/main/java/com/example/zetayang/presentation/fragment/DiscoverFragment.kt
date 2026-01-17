@@ -38,6 +38,7 @@ class DiscoverFragment : Fragment() {
     private var filteredDramas: List<DramaBook> = emptyList()
     private var currentSearchQuery: String = ""
     private var currentCategory: String = "Populer"
+    private var isLoading: Boolean = false
     
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -68,7 +69,8 @@ class DiscoverFragment : Fragment() {
     
     private fun setupRecyclerView() {
         Log.d("DiscoverFragment", "🔧 Setting up RecyclerView")
-        recyclerView.layoutManager = GridLayoutManager(requireContext(), 2)
+        val gridLayoutManager = GridLayoutManager(requireContext(), 2)
+        recyclerView.layoutManager = gridLayoutManager
         adapter = DiscoverAdapter(emptyList())
         recyclerView.adapter = adapter
     }
@@ -79,7 +81,7 @@ class DiscoverFragment : Fragment() {
             
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 try {
-                    currentSearchQuery = s?.toString() ?: ""
+                    currentSearchQuery = s?.toString()?.trim() ?: ""
                     
                     // Only filter if data is loaded
                     if (allDramas.isNotEmpty()) {
@@ -116,11 +118,17 @@ class DiscoverFragment : Fragment() {
     private fun filterDramas() {
         try {
             filteredDramas = allDramas.filter { drama ->
+                // IMPORTANT: Skip dramas with null bookName
+                val name = drama.bookName
+                if (name == null) {
+                    Log.w("DiscoverFragment", "⚠️ Skipping drama with null bookName: ${drama.bookId}")
+                    return@filter false
+                }
+                
                 // Filter by search query
                 val matchesSearch = if (currentSearchQuery.isEmpty()) {
                     true
                 } else {
-                    val name = drama.bookName ?: ""
                     val intro = drama.introduction ?: ""
                     name.contains(currentSearchQuery, ignoreCase = true) ||
                     intro.contains(currentSearchQuery, ignoreCase = true)
@@ -154,7 +162,7 @@ class DiscoverFragment : Fragment() {
             if (currentCategory == "Populer") {
                 filteredDramas = filteredDramas.sortedByDescending { drama ->
                     try {
-                        drama.playCount.toLongOrNull() ?: 0L
+                        drama.playCount?.toLongOrNull() ?: 0L
                     } catch (e: Exception) {
                         0L
                     }
@@ -195,28 +203,43 @@ class DiscoverFragment : Fragment() {
     }
     
     private fun loadDramas() {
-        Log.d("DiscoverFragment", "📥 Loading dramas...")
+        Log.d("DiscoverFragment", "🔥 Loading dramas...")
         
-        // Show loading
         progressBar.visibility = View.VISIBLE
         recyclerView.visibility = View.GONE
         emptyState.visibility = View.GONE
+        isLoading = true
         
         lifecycleScope.launch {
             try {
-                allDramas = RetrofitClient.instance.getHomeFeed()
-                Log.d("DiscoverFragment", "✅ Loaded ${allDramas.size} dramas")
+                // Load data from API
+                val dramas = RetrofitClient.instance.getHomeFeed()
+                
+                // Filter out dramas with null critical fields
+                allDramas = dramas.filter { drama ->
+                    if (drama.bookName == null) {
+                        Log.w("DiscoverFragment", "⚠️ Filtered out drama with null bookName: ${drama.bookId}")
+                        false
+                    } else {
+                        true
+                    }
+                }
+                
+                Log.d("DiscoverFragment", "✅ Loaded ${allDramas.size} valid dramas (filtered ${dramas.size - allDramas.size} with null fields)")
                 
                 // Hide loading
                 progressBar.visibility = View.GONE
+                isLoading = false
                 
-                // Initial filter (Populer by default)
+                // Filter and display
                 filterDramas()
+                
             } catch (e: Exception) {
-                Log.e("DiscoverFragment", "❌ Error: ${e.message}")
+                Log.e("DiscoverFragment", "❌ Error: ${e.message}", e)
                 progressBar.visibility = View.GONE
                 emptyState.visibility = View.VISIBLE
-                tvEmptyMessage.text = "Gagal memuat data"
+                tvEmptyMessage.text = "Gagal memuat data: ${e.message}"
+                isLoading = false
                 Toast.makeText(requireContext(), "Gagal memuat: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
