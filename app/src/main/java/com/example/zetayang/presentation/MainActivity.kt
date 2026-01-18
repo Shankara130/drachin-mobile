@@ -62,26 +62,49 @@ class MainActivity : AppCompatActivity() {
             
             Log.d("MainActivity", "📱 Received ${dramaList.size} dramas | isFirstLoad: $isFirstLoad | currentPos: $currentPosition")
             
+            // Debug: Log first 3 drama titles
+            dramaList.take(3).forEachIndexed { index, drama ->
+                Log.d("MainActivity", "  [$index] ${drama.bookName} (${drama.bookId})")
+            }
+            
+            // CRITICAL: Remove duplicates at UI level (extra safety)
+            val deduplicatedList = dramaList
+                .distinctBy { it.bookId }
+                .toList()
+            
+            if (deduplicatedList.size != dramaList.size) {
+                val duplicateCount = dramaList.size - deduplicatedList.size
+                Log.e("MainActivity", "❌ Removed $duplicateCount duplicates at UI level")
+                
+                // Find duplicates
+                val duplicates = dramaList
+                    .groupBy { it.bookId }
+                    .filter { it.value.size > 1 }
+                    .mapValues { it.value.size }
+                Log.e("MainActivity", "Duplicate bookIds: $duplicates")
+            } else {
+                Log.d("MainActivity", "✅ No duplicates in UI data")
+            }
+            
             if (isFirstLoad) {
-                // FIRST LOAD - Create adapter
-                adapter = VideoAdapter(dramaList, viewModel.getVideoUrlUseCase)
+                // FIRST LOAD - Create adapter with deduplicated list
+                adapter = VideoAdapter(deduplicatedList, viewModel.getVideoUrlUseCase)
                 viewPager.adapter = adapter
                 viewPager.doOnLayout { playVideoAt(0) }
                 isFirstLoad = false
-                Log.d("MainActivity", "✅ First load complete - adapter created")
+                Log.d("MainActivity", "✅ First load complete - ${deduplicatedList.size} unique dramas")
             } else {
-                // LOAD MORE - Update adapter WITHOUT recreating
-                // IMPORTANT: Save position BEFORE updating
+                // LOAD MORE - Update adapter
                 val savedPosition = currentPosition
                 
-                // Update adapter data
-                adapter?.updateDramas(dramaList)
+                // Update with deduplicated list
+                adapter?.updateDramas(deduplicatedList)
                 
                 // Restore position
                 viewPager.post {
-                    if (savedPosition < dramaList.size) {
+                    if (savedPosition < deduplicatedList.size) {
                         viewPager.setCurrentItem(savedPosition, false)
-                        Log.d("MainActivity", "✅ Position restored to $savedPosition")
+                        Log.d("MainActivity", "✅ Position restored to $savedPosition/${deduplicatedList.size}")
                     }
                 }
             }
@@ -103,7 +126,22 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Load initial data
-        viewModel.loadHomeFeed()
+        Log.d("MainActivity", "🚀 Starting app - forcing fresh load...")
+        
+        // CRITICAL: Reset ViewModel state first
+        viewModel.resetData()
+        
+        // Small delay to ensure reset completes
+        viewPager.postDelayed({
+            Log.d("MainActivity", "🚀 Loading fresh data from API...")
+            viewModel.loadHomeFeed()
+            
+            // Debug: Check ViewModel state after load
+            viewPager.postDelayed({
+                val count = viewModel.getLoadedDramasCount()
+                Log.d("MainActivity", "📊 ViewModel has $count dramas loaded")
+            }, 3000)
+        }, 100)
 
         // ViewPager scroll listener for infinite scroll
         viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {

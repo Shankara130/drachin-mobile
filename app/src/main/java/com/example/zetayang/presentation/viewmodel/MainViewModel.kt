@@ -1,5 +1,6 @@
 package com.example.zetayang.presentation.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -16,7 +17,7 @@ class MainViewModel : ViewModel() {
 
     // Dependency Injection manual
     private val api = RetrofitClient.instance
-    private val repository = DramaRepositoryImpl(api)
+    val repository = DramaRepositoryImpl(api) // Make public for cache stats
     val getVideoUrlUseCase = GetVideoUrlUseCase(repository)
 
     private val _homeFeed = MutableLiveData<List<DramaBook>>()
@@ -28,61 +29,89 @@ class MainViewModel : ViewModel() {
     private val _isLoading = MutableLiveData<Boolean>()
     val isLoading: LiveData<Boolean> = _isLoading
 
-    // ORIGINAL list dari repository - NEVER SHUFFLED
-    private var originalDramaList: List<DramaBook> = emptyList()
+    // Use LinkedHashMap to GUARANTEE uniqueness
+    private val uniqueDramasMap = LinkedHashMap<String, DramaBook>()
     
     private var isLoadingMore = false
     private var hasLoadedInitialData = false
     private var shuffleCount = 0
 
     /**
-     * Load initial data - LOAD ALL DRAMAS ONCE
-     * Repository akan fetch dari 3 endpoint: ForYou, Trending, Latest
+     * Load initial data - FAST & DEDUPLICATED from MULTIPLE sources
      */
     fun loadHomeFeed() {
-        // Jika sudah pernah load, emit cached data
-        if (hasLoadedInitialData && originalDramaList.isNotEmpty()) {
-            android.util.Log.d("MainViewModel", "✅ Using cached data (${originalDramaList.size} dramas)")
-            _homeFeed.value = originalDramaList
+        Log.d("MainViewModel", "📞 loadHomeFeed() called | hasLoaded: $hasLoadedInitialData | mapSize: ${uniqueDramasMap.size}")
+        
+        // Jika sudah ada data, emit immediately
+        if (hasLoadedInitialData && uniqueDramasMap.isNotEmpty()) {
+            Log.d("MainViewModel", "✅ Using cached data (${uniqueDramasMap.size} dramas)")
+            _homeFeed.value = uniqueDramasMap.values.toList()
             return
         }
         
         if (isLoadingMore) {
-            android.util.Log.d("MainViewModel", "⚠️ Already loading...")
+            Log.d("MainViewModel", "⚠️ Already loading...")
             return
         }
         
+        Log.d("MainViewModel", "🚀 Starting fresh load from Repository...")
         isLoadingMore = true
         _isLoading.value = true
 
         viewModelScope.launch {
-            android.util.Log.d("MainViewModel", "🔄 Loading ALL dramas from repository...")
+            Log.d("MainViewModel", "🔄 Calling repository.getHomeFeed()...")
             
             repository.getHomeFeed()
                 .onSuccess { dramas ->
-                    // Repository already ensures uniqueness
-                    originalDramaList = dramas
+                    Log.d("MainViewModel", "📦 Repository returned ${dramas.size} dramas")
+                    
+                    // Clear existing data
+                    uniqueDramasMap.clear()
+                    
+                    // Add to LinkedHashMap (GARANTEED unique by bookId)
+                    var addedCount = 0
+                    var skippedCount = 0
+                    
+                    dramas.forEach { drama ->
+                        if (!uniqueDramasMap.containsKey(drama.bookId)) {
+                            uniqueDramasMap[drama.bookId] = drama
+                            addedCount++
+                        } else {
+                            skippedCount++
+                            Log.w("MainViewModel", "⚠️ Skipped duplicate: ${drama.bookId}")
+                        }
+                    }
+                    
                     hasLoadedInitialData = true
                     
-                    // Emit original list
-                    _homeFeed.value = dramas
+                    // Convert to list and emit
+                    val finalList = uniqueDramasMap.values.toList()
+                    _homeFeed.value = finalList
                     
-                    android.util.Log.d(
+                    Log.d(
                         "MainViewModel", 
-                        "✅ Loaded ${dramas.size} UNIQUE dramas from ALL endpoints"
+                        "✅ Loaded $addedCount dramas | Skipped $skippedCount duplicates | Final: ${finalList.size} UNIQUE"
                     )
                     
-                    // Verify uniqueness
-                    val uniqueIds = dramas.map { it.bookId }.toSet()
-                    if (uniqueIds.size == dramas.size) {
-                        android.util.Log.d("MainViewModel", "✅✅ VERIFIED: No duplicates!")
+                    // Log cache statistics
+                    Log.d("MainViewModel", "📊 Cache Stats:\n${repository.getCacheStats()}")
+                    
+                    // CRITICAL: Verify no duplicates in final list
+                    val bookIds = finalList.map { it.bookId }
+                    val uniqueIds = bookIds.toSet()
+                    if (bookIds.size != uniqueIds.size) {
+                        Log.e("MainViewModel", "❌ DUPLICATES IN FINAL LIST: ${bookIds.size - uniqueIds.size}")
+                        
+                        // Find and log duplicates
+                        val duplicates = bookIds.groupingBy { it }.eachCount().filter { it.value > 1 }
+                        Log.e("MainViewModel", "Duplicate bookIds: $duplicates")
                     } else {
-                        android.util.Log.e("MainViewModel", "❌ DUPLICATES FOUND: ${dramas.size - uniqueIds.size} duplicates")
+                        Log.d("MainViewModel", "✅✅ VERIFIED: Zero duplicates in final list")
                     }
                 }
                 .onFailure { throwable ->
+                    Log.e("MainViewModel", "❌ Repository failed: ${throwable.message}")
                     _error.value = throwable.message
-                    android.util.Log.e("MainViewModel", "❌ Failed to load: ${throwable.message}")
                 }
                 .also {
                     isLoadingMore = false
@@ -92,17 +121,16 @@ class MainViewModel : ViewModel() {
     }
 
     /**
-     * Load more - SHUFFLE existing data
-     * TIDAK ada API call baru
+     * Load more - SHUFFLE existing unique data
      */
     fun loadMoreHomeFeed() {
         if (isLoadingMore) {
-            android.util.Log.w("MainViewModel", "⚠️ Already loading, skipping...")
+            Log.w("MainViewModel", "⚠️ Already loading, skipping...")
             return
         }
         
-        if (originalDramaList.isEmpty()) {
-            android.util.Log.w("MainViewModel", "⚠️ No data to shuffle")
+        if (uniqueDramasMap.isEmpty()) {
+            Log.w("MainViewModel", "⚠️ No data to shuffle")
             return
         }
         
@@ -110,39 +138,76 @@ class MainViewModel : ViewModel() {
 
         viewModelScope.launch {
             // Small delay untuk smooth UX
-            delay(500)
+            delay(300)
             
-            // Create shuffled COPY (NEVER modify original)
-            val shuffledCopy = originalDramaList.toMutableList().apply {
+            // Create shuffled list from unique map
+            val shuffledList = uniqueDramasMap.values.toMutableList().apply {
                 shuffle()
             }
             
             shuffleCount++
             
-            // Emit shuffled copy
-            _homeFeed.value = shuffledCopy
+            // Emit shuffled list
+            _homeFeed.value = shuffledList
             
-            android.util.Log.d(
+            Log.d(
                 "MainViewModel", 
-                "🔀 Shuffle #$shuffleCount: ${shuffledCopy.size} dramas"
+                "🔀 Shuffle #$shuffleCount: ${shuffledList.size} dramas"
             )
             
             // Verify no duplicates after shuffle
-            val uniqueIds = shuffledCopy.map { it.bookId }.toSet()
-            if (uniqueIds.size == shuffledCopy.size) {
-                android.util.Log.d("MainViewModel", "✅ Shuffle verified: No duplicates")
+            val bookIds = shuffledList.map { it.bookId }
+            val uniqueIds = bookIds.toSet()
+            if (bookIds.size != uniqueIds.size) {
+                Log.e("MainViewModel", "❌ Duplicates after shuffle: ${bookIds.size - uniqueIds.size}")
             } else {
-                android.util.Log.e("MainViewModel", "❌ Duplicates after shuffle: ${shuffledCopy.size - uniqueIds.size}")
+                Log.d("MainViewModel", "✅ Shuffle verified: Zero duplicates")
             }
             
             isLoadingMore = false
+        }
+    }
+    
+    /**
+     * Search dramas - NEW FEATURE!
+     */
+    fun searchDramas(query: String) {
+        if (query.isBlank()) {
+            Log.w("MainViewModel", "⚠️ Empty search query")
+            return
+        }
+        
+        _isLoading.value = true
+        
+        viewModelScope.launch {
+            repository.searchDramas(query)
+                .onSuccess { results ->
+                    Log.d("MainViewModel", "🔍 Search results: ${results.size} dramas")
+                    
+                    // Add to unique map (don't clear existing)
+                    results.forEach { drama ->
+                        if (!uniqueDramasMap.containsKey(drama.bookId)) {
+                            uniqueDramasMap[drama.bookId] = drama
+                        }
+                    }
+                    
+                    // Emit search results
+                    _homeFeed.value = results
+                }
+                .onFailure { throwable ->
+                    Log.e("MainViewModel", "❌ Search failed: ${throwable.message}")
+                    _error.value = "Search failed: ${throwable.message}"
+                }
+                .also {
+                    _isLoading.value = false
+                }
         }
     }
 
     /**
      * Get current loaded dramas count
      */
-    fun getLoadedDramasCount(): Int = originalDramaList.size
+    fun getLoadedDramasCount(): Int = uniqueDramasMap.size
 
     /**
      * Check if currently loading
@@ -150,12 +215,12 @@ class MainViewModel : ViewModel() {
     fun isCurrentlyLoading(): Boolean = isLoadingMore
 
     /**
-     * Force reload - clear cache and reload ALL from API
+     * Force reload - clear cache and reload from API
      */
     fun forceReload() {
-        android.util.Log.d("MainViewModel", "🔄 Force reload - clearing cache...")
+        Log.d("MainViewModel", "🔄 Force reload - clearing cache...")
         repository.clearCache()
-        originalDramaList = emptyList()
+        uniqueDramasMap.clear()
         hasLoadedInitialData = false
         shuffleCount = 0
         loadHomeFeed()
@@ -165,10 +230,22 @@ class MainViewModel : ViewModel() {
      * Reset data
      */
     fun resetData() {
-        originalDramaList = emptyList()
+        uniqueDramasMap.clear()
         hasLoadedInitialData = false
         isLoadingMore = false
         shuffleCount = 0
-        android.util.Log.d("MainViewModel", "🔄 Data reset")
+        Log.d("MainViewModel", "🔄 Data reset | hasLoaded: $hasLoadedInitialData | mapSize: ${uniqueDramasMap.size}")
+    }
+    
+    /**
+     * Get cache statistics
+     */
+    fun getCacheStats(): String {
+        return """
+            ViewModel Unique Dramas: ${uniqueDramasMap.size}
+            Has Loaded Initial: $hasLoadedInitialData
+            Shuffle Count: $shuffleCount
+            ${repository.getCacheStats()}
+        """.trimIndent()
     }
 }

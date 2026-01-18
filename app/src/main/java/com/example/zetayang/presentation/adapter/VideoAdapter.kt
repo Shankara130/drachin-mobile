@@ -180,6 +180,11 @@ class VideoAdapter(
             val safeUseCase = useCase ?: return
             val cache = urlCacheRef
 
+            if (loadJob?.isActive == true) {
+                Log.d("VideoPlay", "⚠️ Already loading $bookId, skipping...")
+                return
+            }
+
             // Show loading indicator
             progressBar?.visibility = View.VISIBLE
 

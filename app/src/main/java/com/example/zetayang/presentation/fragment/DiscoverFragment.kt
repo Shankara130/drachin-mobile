@@ -13,9 +13,11 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.zetayang.MainActivity
 import com.example.zetayang.R
 import com.example.zetayang.data.api.RetrofitClient
 import com.example.zetayang.data.model.DramaBook
@@ -203,7 +205,7 @@ class DiscoverFragment : Fragment() {
     }
     
     private fun loadDramas() {
-        Log.d("DiscoverFragment", "🔥 Loading dramas...")
+        Log.d("DiscoverFragment", "🔥 Loading dramas from MainActivity's ViewModel...")
         
         progressBar.visibility = View.VISIBLE
         recyclerView.visibility = View.GONE
@@ -212,36 +214,63 @@ class DiscoverFragment : Fragment() {
         
         lifecycleScope.launch {
             try {
-                // Load data from API
-                val dramas = RetrofitClient.instance.getHomeFeed()
-                
-                // Filter out dramas with null critical fields
-                allDramas = dramas.filter { drama ->
-                    if (drama.bookName == null) {
-                        Log.w("DiscoverFragment", "⚠️ Filtered out drama with null bookName: ${drama.bookId}")
-                        false
-                    } else {
-                        true
-                    }
+                // SOLUTION: Use MainActivity's ViewModel instead of creating new Repository
+                // This shares the same cache and data
+                val mainActivity = requireActivity() as? MainActivity
+                val viewModel = mainActivity?.let {
+                    androidx.lifecycle.ViewModelProvider(it)[com.example.zetayang.presentation.viewmodel.MainViewModel::class.java]
                 }
                 
-                Log.d("DiscoverFragment", "✅ Loaded ${allDramas.size} valid dramas (filtered ${dramas.size - allDramas.size} with null fields)")
-                
-                // Hide loading
-                progressBar.visibility = View.GONE
-                isLoading = false
-                
-                // Filter and display
-                filterDramas()
-                
+                if (viewModel != null) {
+                    // Get data from shared ViewModel
+                    viewModel.homeFeed.observe(viewLifecycleOwner) { dramas ->
+                        if (dramas.isNotEmpty()) {
+                            allDramas = dramas
+                            
+                            Log.d("DiscoverFragment", "✅ Loaded ${allDramas.size} dramas from shared ViewModel")
+                            
+                            // Hide loading
+                            progressBar.visibility = View.GONE
+                            isLoading = false
+                            
+                            // Filter and display
+                            filterDramas()
+                        }
+                    }
+                    
+                    // Trigger load if not loaded yet
+                    if (viewModel.getLoadedDramasCount() == 0) {
+                        viewModel.loadHomeFeed()
+                    }
+                } else {
+                    // Fallback: Create own repository instance
+                    val repository = com.example.zetayang.data.repository.DramaRepositoryImpl(
+                        RetrofitClient.instance
+                    )
+                    
+                    val result = repository.getHomeFeed()
+                    result.onSuccess { dramas ->
+                        allDramas = dramas
+                        Log.d("DiscoverFragment", "✅ Loaded ${allDramas.size} dramas from fallback repository")
+                        progressBar.visibility = View.GONE
+                        isLoading = false
+                        filterDramas()
+                    }.onFailure { exception ->
+                        handleError(exception)
+                    }
+                }
             } catch (e: Exception) {
-                Log.e("DiscoverFragment", "❌ Error: ${e.message}", e)
-                progressBar.visibility = View.GONE
-                emptyState.visibility = View.VISIBLE
-                tvEmptyMessage.text = "Gagal memuat data: ${e.message}"
-                isLoading = false
-                Toast.makeText(requireContext(), "Gagal memuat: ${e.message}", Toast.LENGTH_SHORT).show()
+                handleError(e)
             }
         }
+    }
+    
+    private fun handleError(exception: Throwable) {
+        Log.e("DiscoverFragment", "❌ Exception: ${exception.message}", exception)
+        progressBar.visibility = View.GONE
+        emptyState.visibility = View.VISIBLE
+        tvEmptyMessage.text = "Gagal memuat data: ${exception.message}"
+        isLoading = false
+        Toast.makeText(requireContext(), "Gagal memuat: ${exception.message}", Toast.LENGTH_SHORT).show()
     }
 }
